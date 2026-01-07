@@ -64,16 +64,20 @@ def download_sample_subset(
     ensure_credentials()
     print("Requesting a small subset from Copernicus Marine (January 2021, surface)...")
     resp = copernicusmarine.subset(
+
+        # fetch monthly data (each month has 1 salinity and temperature data, which is average over the course of the month)
         dataset_id="cmems_mod_ibi_phy_anfc_0.027deg-3D_P1M-m",
-        variables=["thetao"],
+        variables=["thetao", "so"],
         minimum_longitude=-10.0,
         maximum_longitude=-9.5,
         minimum_latitude=38.0,
         maximum_latitude=38.5,
         minimum_depth=0,
-        maximum_depth=5,
-        start_datetime="2021-01-01T00:00:00Z",
-        end_datetime="2021-01-31T23:59:59Z",
+        maximum_depth=10,
+
+        # load 1 year in monthy data (1 salinity and temperature data for each month)
+        start_datetime="2011-01-01T00:00:00Z",
+        end_datetime="2011-12-31T23:59:59Z",
         output_directory=output_dir,
         output_filename=output_filename,
         overwrite=False,
