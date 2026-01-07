@@ -1,0 +1,10 @@
+{
+  "axis": "Y",
+  "units": "degrees_north",
+  "unit_long": "Degrees North",
+  "standard_name": "latitude",
+  "long_name": "Latitude",
+  "_ARRAY_DIMENSIONS": [
+    "latitude"
+  ]
+}

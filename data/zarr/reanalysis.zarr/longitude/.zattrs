@@ -1,0 +1,10 @@
+{
+  "axis": "X",
+  "units": "degrees_east",
+  "unit_long": "Degrees East",
+  "standard_name": "longitude",
+  "long_name": "Longitude",
+  "_ARRAY_DIMENSIONS": [
+    "longitude"
+  ]
+}

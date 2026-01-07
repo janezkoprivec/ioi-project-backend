@@ -1,0 +1,17 @@
+{
+  "cell_methods": "area: mean",
+  "long_name": "Salinity",
+  "standard_name": "sea_water_salinity",
+  "unit_long": "Practical Salinity Unit",
+  "units": "1e-3",
+  "valid_max": 31700,
+  "valid_min": 1,
+  "add_offset": -0.0015259254723787308,
+  "scale_factor": 0.0015259254723787308,
+  "_ARRAY_DIMENSIONS": [
+    "time",
+    "depth",
+    "latitude",
+    "longitude"
+  ]
+}
