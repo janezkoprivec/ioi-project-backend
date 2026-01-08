@@ -75,6 +75,9 @@ python visualize_data.py --variable thetao --depth 0 --time 2011-01-01
 # Mediterranean Sea (July 2011) with lower resolution
 python visualize_data.py --variable thetao --min-lon -5 --max-lon 36 --min-lat 30 --max-lat 46 --depth 0 --time 2011-07-01 --stride 4
 
+# Asia region temperature (July 2011)
+python visualize_data.py --variable so --depth 0 --time 2011-07-01 --stride 2 --max-lat 14 --min-lat -14 --min-lon 90 --max-lon 155
+
 # Save to file (December 2011)
 python visualize_data.py --variable so --time 2011-12-01 --output salinity_map.png
 ```
