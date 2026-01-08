@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 from typing import Dict, Tuple
 
 import numpy as np
@@ -11,14 +12,21 @@ from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from app.cache import LRUCache
 from app.config import Settings, get_settings
 
-# Use remote datasets (no local Zarr needed)
-from app.datasets_remote import RemoteDatasetManager
+# Use local or remote datasets based on environment variable
+USE_LOCAL_ZARR = os.getenv("USE_LOCAL_ZARR", "false").lower() in ("true", "1", "yes")
+
+if USE_LOCAL_ZARR:
+    from app.datasets import DatasetManager
+    print("✓ Using local Zarr datasets")
+else:
+    from app.datasets_remote import RemoteDatasetManager as DatasetManager
+    print("✓ Using remote Copernicus Marine ARCO datasets")
 
 app = FastAPI(title="Salinity & Temperature API", version="0.1.0")
 
 # Initialize singletons at import time to avoid repeated setup.
 settings = get_settings()
-dataset_manager = RemoteDatasetManager()
+dataset_manager = DatasetManager(zarr_dir=settings.zarr_dir) if USE_LOCAL_ZARR else DatasetManager()
 response_cache: LRUCache[Tuple, bytes] = LRUCache(maxsize=settings.cache_size)
 
 

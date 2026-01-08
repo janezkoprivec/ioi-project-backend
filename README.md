@@ -2,7 +2,27 @@
 
 Serve Copernicus Marine salinity/temperature subsets from local Zarr stores with lazy loading and simple caching.
 
-## Setup
+## Quick Start with Docker (Recommended)
+
+The easiest way to run this project is using Docker Compose:
+
+1. Create a `.env` file with your Copernicus Marine credentials:
+   ```bash
+   COPERNICUSMARINE_USERNAME=your_username
+   COPERNICUSMARINE_PASSWORD=your_password
+   API_PORT=8000  # Optional: change the port (default: 8000)
+   ```
+
+2. Run with Docker Compose:
+   ```bash
+   docker-compose up --build
+   ```
+
+This will automatically download the data and start the API server on http://localhost:8000
+
+See [DOCKER_README.md](DOCKER_README.md) for detailed Docker instructions.
+
+## Manual Setup (Alternative)
 
 1. Python 3.10+ recommended.
 2. `pip install -r requirements.txt`
