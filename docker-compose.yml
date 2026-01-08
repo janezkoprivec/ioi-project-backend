@@ -17,5 +17,9 @@ services:
     volumes:
       # Persist downloaded data between container restarts
       - ./data/zarr:/app/data/zarr
+    # Memory limits: increase if download fails with "Killed" error
+    # Uncomment and adjust these lines if needed:
+    # mem_limit: 4g
+    # memswap_limit: 4g
     restart: unless-stopped
 

@@ -159,7 +159,24 @@ docker-compose logs
 # - Permission issues with data directory
 ```
 
-### Data download fails
+### Data download fails with "Killed" error
+This means the container ran out of memory:
+
+```bash
+# Solution 1: Increase Docker Desktop memory
+# Go to: Docker Desktop → Settings → Resources → Memory
+# Set to 4GB or more, then restart Docker
+
+# Solution 2: Check system memory
+free -h  # On Linux
+docker stats  # Monitor container memory
+
+# Solution 3: Uncomment memory limits in docker-compose.yml:
+# mem_limit: 4g
+# memswap_limit: 4g
+```
+
+### Data download fails (other reasons)
 ```bash
 # Check credentials are correct
 cat .env

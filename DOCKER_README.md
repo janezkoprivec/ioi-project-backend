@@ -101,7 +101,25 @@ API_PORT=8080
 
 ## Troubleshooting
 
-**Data download fails:**
+**Data download fails with "Killed" error:**
+This means the container ran out of memory. Solutions:
+1. **Increase Docker memory limit** (recommended):
+   - Docker Desktop: Settings → Resources → Memory → Set to 4GB or more
+   - Linux: Increase available memory or swap
+   
+2. **Or uncomment memory limits in `docker-compose.yml`**:
+   ```yaml
+   mem_limit: 4g
+   memswap_limit: 4g
+   ```
+
+3. **Check system memory**:
+   ```bash
+   free -h  # Linux
+   docker stats  # Check container memory usage
+   ```
+
+**Data download fails (other reasons):**
 - Check your Copernicus Marine credentials in `.env`
 - Ensure you have internet connectivity
 - Check disk space (download is ~1-2 GB)
