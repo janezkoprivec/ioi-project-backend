@@ -61,6 +61,10 @@ uvicorn app.main:app --reload
 Health: `GET /health`  
 Subset: `GET /subset?dataset=reanalysis&variable=thetao&min_lon=-10&max_lon=-5&min_lat=30&max_lat=35&time=2011-07-01&depth=5&fmt=netcdf`
 
+Mean: `POST /mean?variable=thetao&margin=5&time=2011-07-01&depth=0`  
+Request body (JSON): `[{"lon": -10, "lat": 10}, {"lon": -5, "lat": 15}]`  
+Returns the mean value of the specified variable (thetao or so) computed across multiple coordinate points. For each (lon, lat) pair, creates a square region with the given margin (in degrees) around the point, computes the mean value in that region, then returns the overall mean of all computed means.
+
 Env knobs (prefix `APP_`):
 - `APP_ZARR_DIR` (default `data/zarr`)
 - `APP_SUBSET_MAX_CELLS` (default 400000)
