@@ -5,7 +5,10 @@ This guide will help you run the Salinity & Temperature API using Docker Compose
 ## Prerequisites
 
 - Docker and Docker Compose installed
+- **At least 4GB RAM allocated to Docker** (required for data download)
 - Copernicus Marine credentials (register for free at: https://data.marine.copernicus.eu/register)
+
+> ⚠️ **Low Memory Systems:** If you have less than 4GB RAM or get "Killed" errors during download, see [DOCKER_LOW_MEMORY_WORKAROUND.md](DOCKER_LOW_MEMORY_WORKAROUND.md) for alternative solutions.
 
 ## Quick Start
 

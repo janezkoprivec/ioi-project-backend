@@ -112,38 +112,37 @@ def download_zarr_direct(
       ds = ds[available]
       print(f"Keeping variables: {available}\n")
 
-    # Copy to local Zarr - preserves remote chunking
-    print("Downloading Zarr store (preserving remote chunks)...")
+    # Use extremely memory-efficient approach with Dask streaming
+    print("Downloading Zarr store with minimal memory usage...")
     print("This may take 10-30 minutes depending on network speed...")
-    print("Using memory-efficient variable-by-variable download...\n")
+    print("Using streaming download to avoid out-of-memory errors...\n")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Download variable by variable to reduce memory usage
-    data_vars = list(ds.data_vars)
-    
-    # First, write coordinates and first variable
-    print(f"Step 1/{len(data_vars)}: Writing coordinates and '{data_vars[0]}'...")
-    ds[[data_vars[0]]].to_zarr(
-      output_path,
-      mode="w" if overwrite else "w-",
-      consolidated=False,
-      zarr_format=2,
-    )
-    
-    # Then append remaining variables one by one
-    for i, var in enumerate(data_vars[1:], start=2):
-      print(f"Step {i}/{len(data_vars)}: Downloading variable '{var}'...")
-      ds[[var]].to_zarr(
+    # Configure Dask for minimal memory usage
+    import dask
+    with dask.config.set({
+      'array.slicing.split_large_chunks': True,
+      'distributed.worker.memory.target': False,
+      'distributed.worker.memory.spill': False,
+      'distributed.worker.memory.pause': False,
+    }):
+      # Use compute=False then compute with retries
+      print("Creating delayed write task...")
+      delayed = ds.to_zarr(
         output_path,
-        mode="a",  # Append mode
-        consolidated=False,
+        mode="w" if overwrite else "w-",
+        consolidated=True,
+        compute=False,
         zarr_format=2,
       )
-    
-    # Finally, consolidate metadata
-    print("Consolidating metadata...")
-    zarr.consolidate_metadata(output_path)
+      
+      print("Executing download (streaming from remote to local)...")
+      print("Note: This uses lazy evaluation to minimize memory usage.\n")
+      
+      # Execute with single-threaded scheduler for memory efficiency
+      with dask.config.set(scheduler='single-threaded'):
+        delayed.compute()
 
     # Get final size
     total_size = sum(f.stat().st_size for f in output_path.rglob("*") if f.is_file())
