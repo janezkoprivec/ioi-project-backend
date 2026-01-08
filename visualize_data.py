@@ -225,8 +225,8 @@ Examples:
                        help='Minimum latitude (default: -90)')
     parser.add_argument('--max-lat', type=float, default=90,
                        help='Maximum latitude (default: 90)')
-    parser.add_argument('--time', type=str, default='2020-01-15',
-                       help='Time (ISO format or YYYY-MM-DD, default: 2020-01-15)')
+    parser.add_argument('--time', type=str, default='2011-01-01',
+                       help='Time (ISO format or YYYY-MM-DD, default: 2011-01-15)')
     parser.add_argument('--depth', type=float, default=0,
                        help='Depth in meters (default: 0 = surface)')
     parser.add_argument('--stride', type=int, default=1,
