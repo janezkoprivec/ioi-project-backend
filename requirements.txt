@@ -12,4 +12,4 @@ numpy>=1.24.0
 matplotlib>=3.8.0
 requests>=2.31.0
 # Optional: cartopy for better maps (install via conda for easier setup)
-
+cartopy
