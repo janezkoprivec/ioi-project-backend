@@ -117,7 +117,23 @@ def download_zarr_direct(
     print("This may take 10-30 minutes depending on network speed...")
     print("Using streaming download to avoid out-of-memory errors...\n")
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Ensure parent directory exists with explicit error handling
+    try:
+      output_path.parent.mkdir(parents=True, exist_ok=True)
+      print(f"✓ Created directory: {output_path.parent}")
+    except Exception as e:
+      print(f"✗ Failed to create directory {output_path.parent}: {e}")
+      raise
+    
+    # Also ensure the zarr path itself doesn't exist or is writable
+    if output_path.exists() and not overwrite:
+      raise FileExistsError(f"Output path {output_path} already exists. Use --overwrite to replace.")
+    
+    # Remove existing zarr store if overwrite is True
+    if output_path.exists() and overwrite:
+      import shutil
+      print(f"Removing existing {output_path}...")
+      shutil.rmtree(output_path)
 
     # Configure Dask for minimal memory usage
     import dask

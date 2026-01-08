@@ -5,6 +5,17 @@ echo "========================================="
 echo "Starting Data Download & API Server"
 echo "========================================="
 
+# Ensure data directory exists and is writable
+echo "Checking data directory..."
+mkdir -p /app/data/zarr
+if [ ! -w /app/data/zarr ]; then
+    echo "✗ Error: /app/data/zarr is not writable"
+    echo "  Check Docker volume permissions"
+    exit 1
+fi
+echo "✓ Data directory is ready: /app/data/zarr"
+echo ""
+
 # Check if data already exists
 if [ -d "/app/data/zarr/reanalysis.zarr" ] && [ "$(ls -A /app/data/zarr/reanalysis.zarr)" ]; then
     echo "✓ Data already exists at /app/data/zarr/reanalysis.zarr"
