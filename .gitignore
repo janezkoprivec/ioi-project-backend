@@ -1,3 +1,6 @@
-/.env
+.env
 .venv/
 data/
+
+# don't push cache files
+app/__pycache__/
