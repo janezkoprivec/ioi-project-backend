@@ -2,6 +2,12 @@
 
 Serve Copernicus Marine salinity/temperature subsets from local Zarr stores with lazy loading and simple caching.
 
+## Data Source
+
+This project uses data from the [Global Ocean Physics Reanalysis (GLORYS12V1)](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030/description) database provided by Copernicus Marine Service. We utilize the following variables:
+- **thetao** [degrees celsius] - Sea water potential temperature
+- **so** [psu] - Sea water salinity
+
 ## Quick Start with Docker (Recommended)
 
 The easiest way to run this project is using Docker Compose:
