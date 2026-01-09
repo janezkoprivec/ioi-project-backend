@@ -76,6 +76,31 @@ Parameters:
 Depth is automatically set to 0.0 (surface level).  
 Example: `GET /mean-region?region=world&variable=thetao&time=2011-01&stride=6`
 
+## Precomputed Cache
+
+The API includes a precomputed cache system for frequently accessed data to improve response times. Precomputed cache data exists for:
+
+- **Variables:** `thetao` (temperature) and `so` (salinity)
+- **Strides:** 2, 4, and 8
+- **Spatial regions:** 37 predefined regions specified in `cached_data/cache_api_requests.log`
+
+The list of API calls (lat/lon coordinates) was provided by Janez from the Frontend team and is stored in `cached_data/cache_api_requests.log`. The cache system automatically matches incoming requests with normalized spatial bounds (rounded to 4 decimal places) to handle floating-point precision differences.
+
+**Precomputing the cache:**
+
+⚠️ **Warning:** Precomputing the cache takes approximately 2 hours to complete (222 API requests). Only run this script if approved by the backend team, as it will regenerate all cache files.
+
+```bash
+python cached_data/precompute_caching_dataset.py
+```
+
+This generates 222 cache files (37 regions × 2 variables × 3 strides) in `cached_data/precomputed_cache/` and creates a `cache_index.json` file for fast lookup. The `/subset` endpoint automatically uses cached responses when available, significantly reducing response times for matching requests.
+
+**Testing cache performance:**
+```bash
+python test/test_precomputed_cache.py
+```
+
 Env knobs (prefix `APP_`):
 - `APP_ZARR_DIR` (default `data/zarr`)
 - `APP_SUBSET_MAX_CELLS` (default 400000)
