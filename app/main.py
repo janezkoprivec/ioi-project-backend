@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import io
+import json
 import os
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -34,6 +36,10 @@ dataset_manager = (
   DatasetManager(zarr_dir=settings.zarr_dir) if USE_LOCAL_ZARR else DatasetManager()
 )
 response_cache: LRUCache[Tuple, bytes] = LRUCache(maxsize=settings.cache_size)
+
+# Module-level cache for precomputed cache index
+_precomputed_cache_index: dict | None = None
+_precomputed_cache_dir = Path(__file__).parent.parent / "cached_data" / "precomputed_cache"
 
 
 def get_coord_name(ds: xr.Dataset, candidates) -> str:
@@ -88,6 +94,105 @@ def get_region_bounds(region: str) -> Tuple[float, float, float, float]:
   return (min_lat, max_lat, min_lon, max_lon)
 
 
+def load_precomputed_cache(
+    variable: str,
+    min_lon: float,
+    max_lon: float,
+    min_lat: float,
+    max_lat: float,
+    time: str | None,
+    depth: float | None,
+    stride: int,
+) -> tuple[dict, str] | None:
+    """
+    Load precomputed cache if a matching entry exists.
+    
+    Args:
+        variable: Variable name (thetao or so)
+        min_lon, max_lon, min_lat, max_lat: Spatial bounds (will be normalized to .4f for lookup)
+        time: Time string (e.g., "2011-02")
+        depth: Depth value
+        stride: Stride value
+        
+    Returns:
+        Tuple of (cached_data_dict, matched_filename) if found, None otherwise
+    """
+    global _precomputed_cache_index
+    
+    # Normalize spatial bounds to .4f precision for cache lookup
+    normalized_min_lon = round(min_lon, 4)
+    normalized_max_lon = round(max_lon, 4)
+    normalized_min_lat = round(min_lat, 4)
+    normalized_max_lat = round(max_lat, 4)
+    
+    # Lazy load cache index if not already loaded
+    if _precomputed_cache_index is None:
+        index_file = _precomputed_cache_dir / "cache_index.json"
+        if not index_file.exists():
+            return None
+        
+        try:
+            with open(index_file, "r") as f:
+                _precomputed_cache_index = json.load(f)
+        except Exception as e:
+            print(f"[load_precomputed_cache] ERROR: Failed to load cache index: {e}")
+            return None
+    
+    # Normalize depth: handle None/0 equivalence
+    normalized_depth = 0.0 if depth is None or depth == 0 else depth
+    
+    # Search for matching entry
+    entries = _precomputed_cache_index.get("entries", [])
+    for entry in entries:
+        # Match variable (exact string match)
+        if entry.get("variable") != variable:
+            continue
+        
+        # Match normalized spatial bounds (all 4 values within .4f precision)
+        if (
+            entry.get("min_lon") != normalized_min_lon
+            or entry.get("max_lon") != normalized_max_lon
+            or entry.get("min_lat") != normalized_min_lat
+            or entry.get("max_lat") != normalized_max_lat
+        ):
+            continue
+        
+        # Match time (exact string match, handle None)
+        entry_time = entry.get("time")
+        if entry_time != time:
+            continue
+        
+        # Match depth (exact float match)
+        entry_depth = entry.get("depth", 0)
+        if entry_depth != normalized_depth:
+            continue
+        
+        # Match stride (exact int match)
+        if entry.get("stride") != stride:
+            continue
+        
+        # Match found! Load the cache file
+        filename = entry.get("filename")
+        if not filename:
+            continue
+        
+        cache_file = _precomputed_cache_dir / filename
+        if not cache_file.exists():
+            print(f"[load_precomputed_cache] WARNING: Cache file not found: {cache_file}")
+            continue
+        
+        try:
+            with open(cache_file, "r") as f:
+                cached_data = json.load(f)
+            return (cached_data, filename)
+        except Exception as e:
+            print(f"[load_precomputed_cache] ERROR: Failed to load cache file {filename}: {e}")
+            continue
+    
+    # No match found
+    return None
+
+
 @app.get("/health")
 def health() -> Dict[str, object]:
   result = {"status": "ok", "datasets": {}}
@@ -131,6 +236,68 @@ def subset(
 ):
   if min_lon > max_lon or min_lat > max_lat:
     raise HTTPException(status_code=400, detail="min_* must be <= max_*")
+
+  # Store original (non-normalized) spatial bounds for database queries
+  original_min_lon = min_lon
+  original_max_lon = max_lon
+  original_min_lat = min_lat
+  original_max_lat = max_lat
+
+  # Check precomputed cache with normalized bounds (ONLY for cache lookup)
+  cached_result = load_precomputed_cache(
+    variable=variable,
+    min_lon=min_lon,
+    max_lon=max_lon,
+    min_lat=min_lat,
+    max_lat=max_lat,
+    time=time,
+    depth=depth,
+    stride=stride,
+  )
+
+  if cached_result is not None:
+    cached_data, matched_filename = cached_result
+    normalized_min_lon = round(min_lon, 4)
+    normalized_max_lon = round(max_lon, 4)
+    normalized_min_lat = round(min_lat, 4)
+    normalized_max_lat = round(max_lat, 4)
+    
+    # Cache hit!
+    if fmt == "json":
+      print(
+        f"[CACHE HIT] Found precomputed cache for variable={variable}, "
+        f"normalized_bounds=({normalized_min_lon:.4f}, {normalized_max_lon:.4f}, "
+        f"{normalized_min_lat:.4f}, {normalized_max_lat:.4f}), matched_file={matched_filename}"
+      )
+      return JSONResponse(content=cached_data)
+    else:  # fmt == "netcdf"
+      print(
+        f"[CACHE ERROR] Precomputed cache exists but only supports JSON format. "
+        f"Requested format: netcdf. Normalized bounds: ({normalized_min_lon:.4f}, "
+        f"{normalized_max_lon:.4f}, {normalized_min_lat:.4f}, {normalized_max_lat:.4f}), "
+        f"matched_file={matched_filename}"
+      )
+      raise HTTPException(
+        status_code=400,
+        detail="Precomputed cache is only available in JSON format. Please use fmt=json or query the database directly."
+      )
+
+  # Cache miss - log and continue with database query using original bounds
+  normalized_min_lon = round(min_lon, 4)
+  normalized_max_lon = round(max_lon, 4)
+  normalized_min_lat = round(min_lat, 4)
+  normalized_max_lat = round(max_lat, 4)
+  print(
+    f"[CACHE MISS] No precomputed cache found. Normalized bounds: "
+    f"({normalized_min_lon:.4f}, {normalized_max_lon:.4f}, {normalized_min_lat:.4f}, "
+    f"{normalized_max_lat:.4f}). Loading from database with original bounds."
+  )
+
+  # Use ORIGINAL (non-normalized) bounds for database operations
+  min_lon = original_min_lon
+  max_lon = original_max_lon
+  min_lat = original_min_lat
+  max_lat = original_max_lat
 
   try:
     ds = dataset_manager.get_dataset(dataset)
@@ -208,6 +375,10 @@ def subset(
     data_array.to_dataset(name=variable).to_netcdf(buffer)
     payload = buffer.getvalue()
     response_cache.put(cache_key, payload)
+    print(
+      f"[DATABASE] Loaded data from database for variable={variable}, "
+      f"bounds=({original_min_lon}, {original_max_lon}, {original_min_lat}, {original_max_lat})"
+    )
     return StreamingResponse(
       io.BytesIO(payload),
       media_type="application/x-netcdf",
@@ -218,6 +389,10 @@ def subset(
 
   # JSON path: load into memory then serialize to a light structure.
   loaded = data_array.load()
+  print(
+    f"[DATABASE] Loaded data from database for variable={variable}, "
+    f"bounds=({original_min_lon}, {original_max_lon}, {original_min_lat}, {original_max_lat})"
+  )
 
   # Convert data to numpy array and replace NaN with None for JSON compatibility
   data_array_np = loaded.astype(float).values
