@@ -48,6 +48,35 @@ Download salinity data for the Mediterranean Sea (July 2011) as NetCDF file:
 curl "http://localhost:8000/subset?dataset=reanalysis&variable=so&min_lon=-5&max_lon=36&min_lat=30&max_lat=46&time=2011-07-01&depth=0&stride=5&fmt=netcdf" -o mediterranean_salinity.nc
 ```
 
+## Get Mean Value for Region
+
+Get the mean temperature or salinity for predefined regions (world or europe):
+
+```bash
+# World mean temperature in January 2011
+curl "http://localhost:8000/mean-region?region=world&variable=thetao&time=2011-01&stride=6"
+
+# Europe mean salinity in July 2011
+curl "http://localhost:8000/mean-region?region=europe&variable=so&time=2011-07&stride=2"
+```
+
+Parameters:
+- `region`: `"world"` (global) or `"europe"`
+- `variable`: `"thetao"` (temperature) or `"so"` (salinity)
+- `time`: Time in format `YYYY-MM` or `YYYY-MM-DD` (e.g., `"2011-01"` or `"2011-01-15"`)
+- `stride`: Spatial decimation factor (1-50). Use 4-8 for world, 2-4 for europe to avoid size limits.
+
+Expected response:
+```json
+{
+  "region": "world",
+  "variable": "thetao",
+  "time": "2011-01",
+  "mean": 15.234,
+  "stride": 6
+}
+```
+
 ## Using Python
 
 ```python
@@ -78,6 +107,18 @@ data = response.json()
 print(f"Shape: {data['shape']}")
 print(f"Dimensions: {data['dims']}")
 print(f"Coordinates: {list(data['coords'].keys())}")
+
+# Get mean value for a region
+params = {
+    "region": "world",
+    "variable": "thetao",
+    "time": "2011-01",
+    "stride": 6
+}
+
+response = requests.get("http://localhost:8000/mean-region", params=params)
+result = response.json()
+print(f"World mean temperature in January: {result['mean']}°C")
 ```
 
 ## Interactive API Documentation

@@ -65,6 +65,17 @@ Mean: `POST /mean?variable=thetao&margin=5&time=2011-07-01&depth=0`
 Request body (JSON): `[{"lon": -10, "lat": 10}, {"lon": -5, "lat": 15}]`  
 Returns the mean value of the specified variable (thetao or so) computed across multiple coordinate points. For each (lon, lat) pair, creates a square region with the given margin (in degrees) around the point, computes the mean value in that region, then returns the overall mean of all computed means.
 
+Mean Region: `GET /mean-region?region=world&variable=thetao&time=2011-01&stride=4`  
+Returns the mean value of the specified variable (thetao or so) for a predefined geographic region.  
+Parameters:
+- `region` (required): Geographic region - `"world"` (global: lat -90 to 90, lon -180 to 180) or `"europe"` (lat 29 to 72, lon -15 to 45)
+- `variable` (required): Data variable - `"thetao"` (temperature) or `"so"` (salinity)
+- `time` (required): Time point in format `YYYY-MM` or `YYYY-MM-DD` (e.g., `"2011-01"` or `"2011-01-15"`)
+- `stride` (required): Spatial decimation factor (integer 1-50, e.g., 2 = every 2nd point, 4 = every 4th point). Use higher stride values (4-8) for world region to avoid size limits.
+- `dataset` (optional): Dataset name, defaults to `"reanalysis"`  
+Depth is automatically set to 0.0 (surface level).  
+Example: `GET /mean-region?region=world&variable=thetao&time=2011-01&stride=6`
+
 Env knobs (prefix `APP_`):
 - `APP_ZARR_DIR` (default `data/zarr`)
 - `APP_SUBSET_MAX_CELLS` (default 400000)

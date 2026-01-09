@@ -58,6 +58,36 @@ def enforce_size_limit(da: xr.DataArray, limit: int) -> None:
     )
 
 
+def get_region_bounds(region: str) -> Tuple[float, float, float, float]:
+  """
+  Get spatial bounds (min_lat, max_lat, min_lon, max_lon) for a predefined region.
+  
+  Args:
+    region: Region name, either "world" or "europe"
+    
+  Returns:
+    Tuple of (min_lat, max_lat, min_lon, max_lon)
+    
+  Raises:
+    HTTPException: If region is not "world" or "europe"
+  """
+  region_bounds = {
+    "world": (-90.0, 90.0, -180.0, 180.0),
+    "europe": (29.0, 72.0, -15.0, 45.0),
+  }
+  
+  if region not in region_bounds:
+    error_msg = f"Invalid region '{region}'. Must be one of: {list(region_bounds.keys())}"
+    print(f"[get_region_bounds] ERROR: {error_msg}")
+    raise HTTPException(
+      status_code=400,
+      detail=error_msg
+    )
+  
+  min_lat, max_lat, min_lon, max_lon = region_bounds[region]
+  return (min_lat, max_lat, min_lon, max_lon)
+
+
 @app.get("/health")
 def health() -> Dict[str, object]:
   result = {"status": "ok", "datasets": {}}
@@ -74,7 +104,7 @@ def health() -> Dict[str, object]:
 
 @app.get("/", response_class=PlainTextResponse)
 def root():
-  return "Salinity & Temperature API. See /health and /subset."
+  return "Salinity & Temperature API. See /health, /subset, /mean, and /mean-region."
 
 
 @app.get("/subset", response_model=None)
@@ -90,7 +120,7 @@ def subset(
   time: str | None = Query(
     None, description="ISO timestamp or YYYY-MM-DD; nearest match used."
   ),
-  depth: float | None = Query(None, description="Depth value; nearest match used."),
+  depth: float | None = Query("0", description="Depth value; nearest match used."),
   stride: int = Query(
     1,
     ge=1,
@@ -362,4 +392,199 @@ def mean(
     "mean": final_mean,
     "points_processed": len(means),
     "total_points": len(coordinates),
+  }
+
+
+@app.get("/mean-region")
+def mean_region(
+  region: str = Query(
+    ..., pattern="^(world|europe)$", description="Region name: 'world' or 'europe'"
+  ),
+  variable: str = Query(
+    ..., pattern="^(thetao|so)$", description="Variable to extract: 'thetao' (temperature) or 'so' (salinity)"
+  ),
+  time: str = Query(
+    ..., description="Time in format YYYY-MM or YYYY-MM-DD (e.g., '2011-01' or '2011-01-15')"
+  ),
+  stride: int = Query(
+    ..., ge=1, le=50, description="Spatial decimation factor (1=full res, higher=faster but lower resolution)"
+  ),
+  dataset: str = Query("reanalysis", description="Dataset key: reanalysis."),
+) -> Dict[str, float | str | int]:
+  """
+  Compute mean value of a variable (thetao or so) for a predefined geographic region (world or europe).
+  
+  Args:
+    region: Geographic region - "world" (global) or "europe"
+    variable: Data variable - "thetao" (temperature) or "so" (salinity)
+    time: Time point in format YYYY-MM or YYYY-MM-DD
+    stride: Spatial decimation factor (e.g., 2 = every 2nd point)
+    dataset: Dataset name (default: "reanalysis")
+    
+  Returns:
+    Dictionary with region, variable, time, mean value, and stride
+  """
+  print(f"[mean-region] Request: region={region}, variable={variable}, time={time}, stride={stride}")
+  
+  try:
+    # Get region bounds
+    min_lat, max_lat, min_lon, max_lon = get_region_bounds(region)
+    print(f"[mean-region] Region bounds: lat=[{min_lat}, {max_lat}], lon=[{min_lon}, {max_lon}]")
+  except HTTPException as exc:
+    print(f"[mean-region] ERROR: Invalid region '{region}' - {exc.detail}")
+    raise
+  
+  # Depth is hardcoded to 0
+  depth = 0.0
+  
+  try:
+    ds = dataset_manager.get_dataset(dataset)
+    print(f"[mean-region] Dataset loaded: {dataset}")
+  except (KeyError, FileNotFoundError) as exc:
+    error_msg = f"Dataset '{dataset}' not found: {str(exc)}"
+    print(f"[mean-region] ERROR: {error_msg}")
+    raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+  if variable not in ds.data_vars:
+    error_msg = f"Variable '{variable}' not in dataset '{dataset}'. Available: {list(ds.data_vars)}"
+    print(f"[mean-region] ERROR: {error_msg}")
+    raise HTTPException(
+      status_code=404,
+      detail=error_msg,
+    )
+
+  try:
+    lat_name = get_coord_name(ds, ("lat", "latitude"))
+    lon_name = get_coord_name(ds, ("lon", "longitude"))
+    time_name = get_coord_name(ds, ("time",))
+    depth_name = (
+      get_coord_name(ds, ("depth", "lev", "level")) if "depth" in ds.dims else None
+    )
+    print(f"[mean-region] Coordinate names: lat={lat_name}, lon={lon_name}, time={time_name}, depth={depth_name}")
+  except HTTPException as exc:
+    print(f"[mean-region] ERROR: Coordinate name lookup failed - {exc.detail}")
+    raise
+
+  try:
+    # Select spatial region first (slices don't use method)
+    data_array = ds[variable].sel(
+      {
+        lat_name: slice(min_lat, max_lat),
+        lon_name: slice(min_lon, max_lon),
+      }
+    )
+    print(f"[mean-region] Spatial selection completed. Shape before stride: {data_array.shape}")
+  except Exception as exc:
+    error_msg = f"Failed to select spatial region: {str(exc)}"
+    print(f"[mean-region] ERROR: {error_msg}")
+    raise HTTPException(status_code=400, detail=error_msg) from exc
+
+  # Apply spatial decimation/stride if requested (reduces resolution)
+  if stride > 1:
+    try:
+      data_array = data_array.isel(
+        {
+          lat_name: slice(None, None, stride),
+          lon_name: slice(None, None, stride),
+        }
+      )
+      print(f"[mean-region] Stride {stride} applied. Shape after stride: {data_array.shape}")
+    except Exception as exc:
+      error_msg = f"Failed to apply stride {stride}: {str(exc)}"
+      print(f"[mean-region] ERROR: {error_msg}")
+      raise HTTPException(status_code=400, detail=error_msg) from exc
+
+  # Select time and depth with nearest neighbor matching
+  point_sel = {}
+  try:
+    parsed_time = np.datetime64(time)
+    print(f"[mean-region] Parsed time: {parsed_time}")
+  except ValueError as exc:
+    error_msg = f"Invalid time format: {time}. Use YYYY-MM or YYYY-MM-DD format. Error: {str(exc)}"
+    print(f"[mean-region] ERROR: {error_msg}")
+    raise HTTPException(
+      status_code=400, detail=error_msg
+    ) from exc
+  point_sel[time_name] = parsed_time
+  
+  if depth_name:
+    point_sel[depth_name] = depth
+    print(f"[mean-region] Depth selection: {depth}")
+
+  if point_sel:
+    try:
+      print(f"[mean-region] Selecting time/depth with: {point_sel}")
+      print(f"[mean-region] DataArray dims before time/depth selection: {data_array.dims}")
+      print(f"[mean-region] DataArray shape before time/depth selection: {data_array.shape}")
+      data_array = data_array.sel(point_sel, method="nearest")
+      print(f"[mean-region] Time/depth selection completed. Final shape: {data_array.shape}")
+      print(f"[mean-region] Final dimensions: {data_array.dims}")
+    except Exception as exc:
+      error_msg = f"Failed to select time/depth: {str(exc)}"
+      print(f"[mean-region] ERROR: {error_msg}")
+      import traceback
+      print(f"[mean-region] Traceback: {traceback.format_exc()}")
+      raise HTTPException(status_code=400, detail=error_msg) from exc
+
+  # Enforce size limit before loading
+  try:
+    sizes = data_array.sizes
+    total_cells = 1
+    for dim in sizes:
+      total_cells *= sizes[dim]
+    print(f"[mean-region] Total cells: {total_cells}, limit: {settings.subset_max_cells}")
+    print(f"[mean-region] DataArray is chunked: {data_array.chunks is not None}")
+    if data_array.chunks:
+      print(f"[mean-region] Chunk sizes: {data_array.chunks}")
+    enforce_size_limit(data_array, settings.subset_max_cells)
+    print("[mean-region] Size limit check passed")
+  except HTTPException as exc:
+    print(f"[mean-region] ERROR: Size limit exceeded - {exc.detail}")
+    raise
+  except Exception as exc:
+    error_msg = f"Error checking size limit: {str(exc)}"
+    print(f"[mean-region] ERROR: {error_msg}")
+    import traceback
+    print(f"[mean-region] Traceback: {traceback.format_exc()}")
+    raise HTTPException(status_code=400, detail=error_msg) from exc
+
+  # Load the data into memory
+  print("[mean-region] Starting data load... (this may take a while for large datasets)")
+  try:
+    loaded = data_array.load()
+    print(f"[mean-region] Data loaded into memory successfully. Shape: {loaded.shape}")
+  except KeyboardInterrupt:
+    print("[mean-region] ERROR: Data loading was interrupted")
+    raise HTTPException(status_code=500, detail="Data loading was interrupted")
+  except Exception as exc:
+    error_msg = f"Failed to load data: {str(exc)}"
+    print(f"[mean-region] ERROR: {error_msg}")
+    import traceback
+    print(f"[mean-region] Traceback: {traceback.format_exc()}")
+    raise HTTPException(status_code=400, detail=error_msg) from exc
+
+  # Compute mean using nanmean to handle NaN/missing values
+  try:
+    mean_value = float(np.nanmean(loaded.values))
+    print(f"[mean-region] Mean computed: {mean_value}")
+  except Exception as exc:
+    error_msg = f"Failed to compute mean: {str(exc)}"
+    print(f"[mean-region] ERROR: {error_msg}")
+    raise HTTPException(status_code=400, detail=error_msg) from exc
+
+  # Check if all values were NaN
+  if np.isnan(mean_value):
+    error_msg = f"No valid data found for region '{region}' at time '{time}'. All values were NaN."
+    print(f"[mean-region] ERROR: {error_msg}")
+    raise HTTPException(
+      status_code=400,
+      detail=error_msg
+    )
+
+  return {
+    "region": region,
+    "variable": variable,
+    "time": time,
+    "mean": mean_value,
+    "stride": stride,
   }
